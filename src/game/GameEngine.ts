@@ -1,6 +1,6 @@
 import { checkCollision, isNearMiss } from './CollisionEngine';
-import { calculateScore } from './GameRules';
-import { ARENA_WIDTH, OBJECT_TYPES, TARGET_WIDTH } from './objectTypes';
+import { calculateScore, getStageForPoints, getStageProgressPoints, getStageRules } from './GameRules';
+import { ARENA_WIDTH, OBJECT_TYPES } from './objectTypes';
 import { advanceObjects, clampTargetX, pruneLandedObjects } from './PhysicsEngine';
 import type {
   AttackerAction,
@@ -12,18 +12,21 @@ import type {
 } from './types';
 
 function initialState(settings: GameSettings): GameState {
+  const stageOne = getStageRules(1);
   return {
     phase: 'ATTACKER_TURN',
     turn: 1,
     totalTurns: Math.max(1, settings.totalTurns),
     arenaWidth: ARENA_WIDTH,
-    target: { x: (ARENA_WIDTH - TARGET_WIDTH) / 2, width: TARGET_WIDTH },
+    target: { x: (ARENA_WIDTH - stageOne.targetWidth) / 2, width: stageOne.targetWidth },
     fallingObjects: [],
     settings,
     winner: null,
     score: 0,
     dodges: 0,
     nearMisses: 0,
+    stage: 1,
+    stageProgressPoints: 0,
     lastEvent: null,
   };
 }
@@ -36,6 +39,7 @@ export function toSnapshot(state: GameState): GameStateSnapshot {
     target: state.target,
     fallingObjects: state.fallingObjects,
     settings: state.settings,
+    stage: state.stage,
   };
 }
 
@@ -103,7 +107,8 @@ export class GameEngine {
   resolve() {
     if (this.state.phase !== 'RESOLVING' || !this.pendingDefenderAction) return;
 
-    const move = this.pendingDefenderAction.type === 'LEFT' ? -1 : this.pendingDefenderAction.type === 'RIGHT' ? 1 : 0;
+    const moveRange = getStageRules(this.state.stage).moveRange;
+    const move = this.pendingDefenderAction.type === 'LEFT' ? -moveRange : this.pendingDefenderAction.type === 'RIGHT' ? moveRange : 0;
     const target = {
       ...this.state.target,
       x: clampTargetX(this.state.target.x + move, this.state.target.width, this.state.arenaWidth),
@@ -168,15 +173,28 @@ export class GameEngine {
       return;
     }
 
+    // Stage advances when earned (points threshold crossed), never by turn count alone —
+    // every stage-up unlocks a new block type for the attacker AND a movement/hitbox
+    // counter for the defender (see STAGE_TABLE in GameRules.ts).
+    const stageProgressPoints = getStageProgressPoints(nextTurn, dodges, nearMisses);
+    const nextStage = getStageForPoints(stageProgressPoints);
+    const stagedUp = nextStage > this.state.stage;
+    const stageRules = getStageRules(nextStage);
+    const stagedTarget = stagedUp
+      ? { x: clampTargetX(target.x, stageRules.targetWidth, this.state.arenaWidth), width: stageRules.targetWidth }
+      : target;
+
     this.state = {
       ...this.state,
-      target,
+      target: stagedTarget,
       fallingObjects: survived,
       turn: nextTurn,
       phase: 'ATTACKER_TURN',
       dodges,
       nearMisses,
-      lastEvent: { kind: 'DODGED' },
+      stage: nextStage,
+      stageProgressPoints,
+      lastEvent: stagedUp ? { kind: 'STAGE_UP', detail: String(nextStage) } : { kind: 'DODGED' },
     };
     this.notify();
   }

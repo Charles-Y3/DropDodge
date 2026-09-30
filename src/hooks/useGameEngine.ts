@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameEngine, toSnapshot } from '../game/GameEngine';
-import { getStageParams } from '../game/GameRules';
+import { getStageRules } from '../game/GameRules';
 import type { AttackerAction, DefenderAction, GameSettings, GameState, ObjectTypeId, Role } from '../game/types';
 import { LearnedController } from '../controllers/LearnedController';
-import { NeedleController } from '../controllers/NeedleController';
 import { StrategicController } from '../controllers/StrategicController';
 import { TacticalController } from '../controllers/TacticalController';
 import type { Controller } from '../controllers/types';
@@ -16,7 +15,6 @@ const CONTROLLERS: Record<GameSettings['aiDifficulty'], Controller> = {
   TACTICAL: TacticalController,
   STRATEGIC: StrategicController,
   LEARNED: LearnedController,
-  NEEDLE: NeedleController,
 };
 
 export function useGameEngine(settings: GameSettings) {
@@ -76,7 +74,7 @@ export function useGameEngine(settings: GameSettings) {
     return undefined;
   }, [state.phase, state.turn, humanRole, aiController, engine, turnIntervalMs]);
 
-  const stage = getStageParams(state.turn, settings.difficulty);
+  const stageRules = getStageRules(state.stage);
 
   const dropObject = (position: number, objectType: ObjectTypeId) => {
     if (humanRole !== 'attacker' || state.phase !== 'ATTACKER_TURN') return;
@@ -96,7 +94,7 @@ export function useGameEngine(settings: GameSettings) {
   return {
     state,
     humanRole,
-    stage,
+    stageRules,
     isThinking,
     dropObject,
     waitAsAttacker,

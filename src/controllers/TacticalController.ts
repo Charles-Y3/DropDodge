@@ -1,7 +1,8 @@
-import { getStageParams } from '../game/GameRules';
+import { AI_DIFFICULTY_PARAMS, getStageRules } from '../game/GameRules';
 import { ARENA_HEIGHT } from '../game/objectTypes';
 import { clampTargetX } from '../game/PhysicsEngine';
 import type { Action, DefenderAction, FallingObject, GameStateSnapshot, Role } from '../game/types';
+import { applyMistakeChance } from './difficulty';
 import { turnsUntilCollision } from './predict';
 
 /**
@@ -10,23 +11,25 @@ import { turnsUntilCollision } from './predict';
  * least as far as the slowest object needs to fall — with a horizon shorter than that,
  * every candidate reads back "safe" for most of the game and the defender never moves
  * until it's already too late (the bug this fixes: was a fixed HORIZON=5 turns, but a
- * SLOW object takes up to ARENA_HEIGHT / 0.5 = 20 turns to land).
+ * SLOW object takes up to ARENA_HEIGHT / 0.5 = 20 turns to land). Difficulty scales this
+ * horizon further — Hard plans further ahead, Easy plans less.
  */
-function horizonFor(fallingObjects: FallingObject[]): number {
+function horizonFor(fallingObjects: FallingObject[], horizonMultiplier: number): number {
   const slowestSpeed = fallingObjects.reduce((min, obj) => Math.min(min, obj.speed), 1);
-  return Math.max(5, Math.ceil(ARENA_HEIGHT / slowestSpeed));
+  return Math.max(5, Math.ceil((ARENA_HEIGHT / slowestSpeed) * horizonMultiplier));
 }
 
 function decideDefender(snapshot: GameStateSnapshot): Action {
-  const { target, fallingObjects, arenaWidth } = snapshot;
+  const { target, fallingObjects, arenaWidth, stage, settings } = snapshot;
+  const moveRange = getStageRules(stage).moveRange;
+  const horizon = horizonFor(fallingObjects, AI_DIFFICULTY_PARAMS[settings.difficulty].tacticalHorizonMultiplier);
   const candidates: DefenderAction['type'][] = ['STAY', 'LEFT', 'RIGHT'];
-  const horizon = horizonFor(fallingObjects);
 
   let best: DefenderAction['type'] = 'STAY';
   let bestRisk = -1;
 
   for (const move of candidates) {
-    const delta = move === 'LEFT' ? -1 : move === 'RIGHT' ? 1 : 0;
+    const delta = move === 'LEFT' ? -moveRange : move === 'RIGHT' ? moveRange : 0;
     const candidateX = clampTargetX(target.x + delta, target.width, arenaWidth);
 
     const minTurns = fallingObjects.length
@@ -44,13 +47,13 @@ function decideDefender(snapshot: GameStateSnapshot): Action {
 }
 
 function decideAttacker(snapshot: GameStateSnapshot): Action {
-  const { turn, settings, target, fallingObjects, arenaWidth } = snapshot;
-  const stage = getStageParams(turn, settings.difficulty);
+  const { stage, target, fallingObjects, arenaWidth } = snapshot;
+  const rules = getStageRules(stage);
 
-  if (fallingObjects.length >= stage.maxSimultaneous) return { type: 'WAIT' };
-  if (Math.random() > stage.dropProbability) return { type: 'WAIT' };
+  if (fallingObjects.length >= rules.maxSimultaneous) return { type: 'WAIT' };
+  if (Math.random() > rules.dropProbability) return { type: 'WAIT' };
 
-  const objectType = stage.allowedTypes[Math.floor(Math.random() * stage.allowedTypes.length)];
+  const objectType = rules.allowedTypes[Math.floor(Math.random() * rules.allowedTypes.length)];
   const jitter = (Math.random() - 0.5) * 2;
   const position = Math.min(Math.max(target.x + target.width / 2 + jitter, 0), arenaWidth - 1);
 
@@ -59,6 +62,7 @@ function decideAttacker(snapshot: GameStateSnapshot): Action {
 
 export const TacticalController = {
   async decide(snapshot: GameStateSnapshot, role: Role): Promise<Action> {
-    return role === 'defender' ? decideDefender(snapshot) : decideAttacker(snapshot);
+    const action = role === 'defender' ? decideDefender(snapshot) : decideAttacker(snapshot);
+    return applyMistakeChance(action, role, snapshot.settings);
   },
 };

@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import type { GameSettings } from '../game/types';
-import { DEFAULT_NEEDLE_SETTINGS, getNeedleSettings, saveNeedleSettings } from '../utils/aiSettings';
 
 interface Props {
   initialSettings: GameSettings;
@@ -14,7 +13,6 @@ const AI_OPTIONS: { value: GameSettings['aiDifficulty']; label: string }[] = [
   { value: 'TACTICAL', label: 'Tactical' },
   { value: 'STRATEGIC', label: 'Strategic' },
   { value: 'LEARNED', label: 'Learned' },
-  { value: 'NEEDLE', label: 'Needle' },
 ];
 
 const AI_DESCRIPTIONS: Record<GameSettings['aiDifficulty'], string> = {
@@ -23,23 +21,20 @@ const AI_DESCRIPTIONS: Record<GameSettings['aiDifficulty'], string> = {
   STRATEGIC:
     'Multi-move search — plays out several of its own future moves against the real physics engine to find the path that survives longest. Its attacker simulates against a Tactical defender to find the best drop.',
   LEARNED:
-    'A small neural network trained offline via self-play (not hand-written rules or search) picks the defensive move. Attacking reuses Strategic’s simulation.',
-  NEEDLE:
-    'Tool-calling LLM opponent (Needle-style) — sends the board state to an AI model you configure below and lets it call a move/drop tool. Requires your own API key; falls back to Tactical AI automatically without one.',
+    "A small neural network trained offline via self-play (not hand-written rules or search) picks the defensive move. Attacking reuses Strategic's simulation.",
+};
+
+const DIFFICULTY_DESCRIPTIONS: Record<GameSettings['difficulty'], string> = {
+  EASY: 'The AI makes frequent mistakes and plans less far ahead. Object variety and pacing are unaffected — that’s controlled by stage, which is the same at every difficulty.',
+  NORMAL: 'The AI plays its chosen style (Tactical / Strategic / Learned) at its default skill level.',
+  HARD: 'The AI rarely makes mistakes and plans further ahead (deeper search, wider lookahead). Object variety and pacing are still stage-based, not difficulty-based.',
 };
 
 export function Setup({ initialSettings, onStart }: Props) {
   const [settings, setSettings] = useState<GameSettings>(initialSettings);
-  const [needleSettings, setNeedleSettings] = useState(() => getNeedleSettings());
 
   const update = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) =>
     setSettings((prev) => ({ ...prev, [key]: value }));
-
-  const updateNeedleKey = (apiKey: string) => {
-    const next = { ...needleSettings, apiKey };
-    setNeedleSettings(next);
-    saveNeedleSettings(next);
-  };
 
   return (
     <div className="flex h-full flex-col">
@@ -64,24 +59,6 @@ export function Setup({ initialSettings, onStart }: Props) {
             onChange={(v) => update('aiDifficulty', v as GameSettings['aiDifficulty'])}
           />
           <p className="mt-2 text-xs leading-relaxed text-slate-400">{AI_DESCRIPTIONS[settings.aiDifficulty]}</p>
-
-          {settings.aiDifficulty === 'NEEDLE' && (
-            <div className="mt-3 space-y-2 rounded-lg bg-slate-900/60 p-3">
-              <label className="block text-xs font-semibold text-slate-300">Anthropic API key</label>
-              <input
-                type="password"
-                value={needleSettings.apiKey}
-                onChange={(e) => updateNeedleKey(e.target.value)}
-                placeholder={DEFAULT_NEEDLE_SETTINGS.apiKey ? '' : 'sk-ant-...'}
-                className="w-full rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-100"
-              />
-              <p className="text-xs leading-relaxed text-slate-500">
-                Stored only in this browser and sent directly to Anthropic's API when it's your turn to
-                face it — never to any other server. Leave it blank to automatically play against Tactical
-                AI instead.
-              </p>
-            </div>
-          )}
         </Section>
 
         <Section title="TURNS">
@@ -92,12 +69,13 @@ export function Setup({ initialSettings, onStart }: Props) {
           />
         </Section>
 
-        <Section title="DIFFICULTY">
+        <Section title="DIFFICULTY (AI SKILL)">
           <RadioRow
             options={DIFFICULTIES.map((d) => ({ value: d, label: d }))}
             value={settings.difficulty}
             onChange={(v) => update('difficulty', v as GameSettings['difficulty'])}
           />
+          <p className="mt-2 text-xs leading-relaxed text-slate-400">{DIFFICULTY_DESCRIPTIONS[settings.difficulty]}</p>
         </Section>
       </div>
 

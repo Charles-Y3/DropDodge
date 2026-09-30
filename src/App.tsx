@@ -16,7 +16,7 @@ import {
   savePlayerName,
 } from './utils/storage';
 
-type Screen = 'menu' | 'setup' | 'playing' | 'results';
+type Screen = 'menu' | 'setup' | 'playing';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -37,7 +37,6 @@ export default function App() {
 
   const handleGameOver = (state: GameState) => {
     setLastState(state);
-    setScreen('results');
   };
 
   return (
@@ -55,7 +54,7 @@ export default function App() {
 
         {screen === 'playing' && <GameScreen key={gameRunId} settings={settings} onGameOver={handleGameOver} />}
 
-        {screen === 'results' && lastState && (
+        {screen === 'playing' && lastState && (
           <Results
             state={lastState}
             defaultPlayerName={getPlayerName()}

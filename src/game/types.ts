@@ -27,7 +27,7 @@ export interface FallingObject {
 
 export type Role = 'attacker' | 'defender';
 
-export type AIDifficulty = 'TACTICAL' | 'STRATEGIC' | 'LEARNED' | 'NEEDLE';
+export type AIDifficulty = 'TACTICAL' | 'STRATEGIC' | 'LEARNED';
 
 export type GameMode = 'PLAYER_DODGES' | 'PLAYER_ATTACKS';
 
@@ -54,7 +54,7 @@ export interface Target {
 }
 
 export interface TurnEvent {
-  kind: 'DROPPED' | 'WAITED' | 'MOVED' | 'DODGED' | 'CLOSE_CALL' | 'HIT';
+  kind: 'DROPPED' | 'WAITED' | 'MOVED' | 'DODGED' | 'CLOSE_CALL' | 'HIT' | 'STAGE_UP';
   detail?: string;
 }
 
@@ -70,6 +70,8 @@ export interface GameState {
   score: number;
   dodges: number;
   nearMisses: number;
+  stage: number;
+  stageProgressPoints: number;
   lastEvent: TurnEvent | null;
 }
 
@@ -80,4 +82,5 @@ export interface GameStateSnapshot {
   target: Target;
   fallingObjects: FallingObject[];
   settings: GameSettings;
+  stage: number;
 }

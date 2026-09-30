@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { STAGE_TABLE } from '../game/GameRules';
 import { ARENA_HEIGHT } from '../game/objectTypes';
 import type { GameSettings, GameState, ObjectTypeId } from '../game/types';
 import { useGameEngine } from '../hooks/useGameEngine';
@@ -14,14 +15,21 @@ const AI_LABELS: Record<GameSettings['aiDifficulty'], string> = {
   TACTICAL: 'Tactical',
   STRATEGIC: 'Strategic',
   LEARNED: 'Learned',
-  NEEDLE: 'Needle',
+};
+
+const STAGE_ANNOUNCEMENTS: Record<number, string> = {
+  2: 'STAGE 2 — FAST unlocked! You now move 2 columns per turn.',
+  3: 'STAGE 3 — SLOW unlocked! Your hitbox is now leaner.',
+  4: 'STAGE 4 — WIDE unlocked! You now move 3 columns per turn.',
+  5: 'STAGE 5 — SMALL unlocked! You move 4 columns per turn with your leanest hitbox yet.',
 };
 
 export function GameScreen({ settings, onGameOver }: Props) {
-  const { state, humanRole, stage, isThinking, dropObject, waitAsAttacker, moveDefender } = useGameEngine(settings);
+  const { state, humanRole, isThinking, dropObject, waitAsAttacker, moveDefender } = useGameEngine(settings);
   const reportedRef = useRef(false);
   const arenaRef = useRef<HTMLDivElement>(null);
   const [objectType, setObjectType] = useState<ObjectTypeId>('NORMAL');
+  const [stageBanner, setStageBanner] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.phase === 'GAME_OVER' && !reportedRef.current) {
@@ -29,6 +37,15 @@ export function GameScreen({ settings, onGameOver }: Props) {
       onGameOver(state);
     }
   }, [state, onGameOver]);
+
+  useEffect(() => {
+    if (state.lastEvent?.kind === 'STAGE_UP') {
+      setStageBanner(STAGE_ANNOUNCEMENTS[state.stage] ?? `STAGE ${state.stage}!`);
+      const timer = setTimeout(() => setStageBanner(null), 2000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [state.lastEvent, state.stage]);
 
   const canDrop = humanRole === 'attacker' && state.phase === 'ATTACKER_TURN';
 
@@ -40,15 +57,28 @@ export function GameScreen({ settings, onGameOver }: Props) {
     dropObject(position, objectType);
   };
 
+  const currentThreshold = STAGE_TABLE[state.stage - 1]?.threshold ?? 0;
+  const nextThreshold = STAGE_TABLE[state.stage]?.threshold;
+  const stageProgressRatio = nextThreshold
+    ? Math.min(Math.max((state.stageProgressPoints - currentThreshold) / (nextThreshold - currentThreshold), 0), 1)
+    : 1;
+
   return (
     <div className="flex h-full w-full flex-col gap-3 p-3 sm:p-4">
       <div className="flex items-center justify-between text-slate-200 text-sm sm:text-base font-semibold">
         <span>Turn {state.turn} / {state.totalTurns}</span>
-        <span>Stage {stage.stage}</span>
+        <span>Stage {state.stage} / {STAGE_TABLE.length}</span>
         <span className="text-xs font-normal text-slate-400">
           AI: {AI_LABELS[settings.aiDifficulty]}
           {isThinking ? '…' : ''}
         </span>
+      </div>
+
+      <div className="h-1 w-full overflow-hidden rounded-full bg-slate-800">
+        <div
+          className="h-full rounded-full bg-amber-400 transition-[width] duration-300"
+          style={{ width: `${stageProgressRatio * 100}%` }}
+        />
       </div>
 
       <TurnBanner phase={state.phase} humanRole={humanRole} />
@@ -77,7 +107,7 @@ export function GameScreen({ settings, onGameOver }: Props) {
         ))}
 
         <div
-          className="absolute bottom-0 rounded-t-md bg-emerald-400 shadow-lg transition-[left] duration-150 ease-linear"
+          className="absolute bottom-0 rounded-t-md bg-emerald-400 shadow-lg transition-[left,width] duration-150 ease-linear"
           style={{
             left: `${(state.target.x / state.arenaWidth) * 100}%`,
             width: `${(state.target.width / state.arenaWidth) * 100}%`,
@@ -88,6 +118,12 @@ export function GameScreen({ settings, onGameOver }: Props) {
         {state.lastEvent?.kind === 'CLOSE_CALL' && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl font-black text-amber-300">
             CLOSE!
+          </div>
+        )}
+
+        {stageBanner && (
+          <div className="pointer-events-none absolute inset-x-2 top-2 rounded-lg bg-amber-400/95 px-3 py-2 text-center text-sm font-bold text-amber-950 shadow-lg">
+            {stageBanner}
           </div>
         )}
       </div>
